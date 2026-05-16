@@ -6,12 +6,6 @@ RepoLens analyzes any public GitHub repository and generates a structured techni
 
 ---
 
-## Demo
-
-[![RepoLens Demo](image.png)](https://www.loom.com/share/46f825371440460bb668b292aa829e6b)
-
----
-
 ## What It Does
 
 1. **Analyzes** a GitHub repo by reading its files using the GitHub API
@@ -29,25 +23,26 @@ User
  │
  ├── POST /analyze/{session_id}
  │     └── Report Creation Agent (OpenAI Agents SDK)
- │           ├── get_readme()          GitHub API
- │           ├── return_file_structure() GitHub API
- │           ├── navigate_repository()       GitHub API
- │           └── create_chunks()       → Qdrant (raw code chunks)
+ │           ├── get_readme()              GitHub API
+ │           ├── return_file_structure()   GitHub API
+ │           ├── navigate_repository()     GitHub API
+ │           └── create_chunks()           → Qdrant (documents_{repo_key})
  │
  ├── GET  /download/{session_id}
  │     └── Playwright → PDF bytes → browser
  │
  └── WS   /chat/{session_id}
        ├── create_knowledge_graph()
-       │     ├── scroll Qdrant (raw chunks)
+       │     ├── scroll Qdrant (documents_{repo_key})
        │     └── LLMGraphTransformer → GraphDocuments
-       ├── store_graph()   → Neo4j
-       ├── store_knowledge_graph()  → Qdrant (graph doc embeddings)
+       ├── prefix_graph_docs()     prefix node IDs with repo key
+       ├── store_graph()           → Neo4j (prefixed node IDs)
+       ├── store_knowledge_graph() → Qdrant (graph_documents_{repo_key})
        └── Chat loop
              └── Chat Agent (OpenAI Agents SDK)
                    └── Query_VectorDB()
-                         ├── Qdrant vector search (graph docs)
-                         └── Neo4j traversal (1-hop relationships)
+                         ├── Qdrant vector search (graph_documents_{repo_key})
+                         └── Neo4j traversal (1-hop relationships, filtered by prefix)
 ```
 
 ---
@@ -156,10 +151,11 @@ RepoLens/
 ├── .cache.json               # optional local cache for reports and graph indexing
 ├── .env                      # environment variables (not checked in)
 ├── chatbot/
-│   ├── chat.py               # Chat agent + answer streaming
+│   ├── chat.py               # Chat agent + answer streaming (per-call agent factory)
 │   └── prompt.py             # Chat agent prompt instructions
 ├── db/
-│   ├── neo4j.py              # Neo4j graph storage helpers
+│   ├── context.py            # ContextVar for per-repo Qdrant collection routing
+│   ├── neo4j.py              # Neo4j graph storage + node ID prefixing
 │   └── qdrant.py             # Qdrant document storage helpers
 ├── graph/
 │   ├── create_prompt.py      # final prompt builder for the chat pipeline
@@ -214,8 +210,21 @@ RepoLens uses a local `.cache.json` file to speed up repeated repository analysi
 
 - `main.py` stores per-repo cache entries keyed by `owner/repo@branch`.
 - On `/analyze`, if the latest GitHub commit SHA matches the cached SHA, the stored tutorial report is streamed instead of recomputing it.
-- On `/chat`, if the repository was already indexed and the cached graph is still active, the knowledge graph pipeline is skipped.
+- On `/chat`, if the repository was already indexed, the app checks whether its dedicated Qdrant collection (`graph_documents_{repo_key}`) still exists. If it does, the knowledge graph pipeline is skipped and chat starts immediately.
 - The cache keeps up to 20 entries and avoids repeated work when the repo content has not changed.
+
+### Per-repo isolation
+
+Each repository gets its own pair of Qdrant collections:
+
+| Collection | Contents |
+|---|---|
+| `documents_{repo_key}` | Raw code chunks stored during analysis |
+| `graph_documents_{repo_key}` | Embedded graph documents used during chat |
+
+`repo_key` is derived from `owner/repo@branch` with non-alphanumeric characters replaced by `_` (e.g. `openai_openai_python_main`).
+
+All Neo4j nodes are prefixed with the repo key (`owner/repo@branch::NodeId`) so multiple repositories can coexist in the same Neo4j database without their entities colliding. Switching between repositories requires no cache invalidation — each repo's graph is always available independently.
 
 ---
 
@@ -231,8 +240,8 @@ python -m playwright install chromium
 
 If your environment cannot launch Chromium, install the appropriate browser package or run inside a container with GUI support.
 
-**`Collection 'documents' doesn't exist`**
-This happens when the chat is opened before the parent agent has finished analyzing the repo. Complete the analysis step first so `create_chunks` has populated Qdrant.
+**`Collection 'documents_...' doesn't exist`**
+This happens when the chat is opened before the parent agent has finished analyzing the repo. Complete the analysis step first so `create_chunks` has populated the per-repo Qdrant collection.
 
 **Rate limit errors during graph extraction**
 The semaphore limits concurrent calls but if your Qdrant collection has many chunks you may still hit TPM limits. Reduce the semaphore value to `asyncio.Semaphore(1)` or switch from `gpt-4o-mini` to a higher-tier model with more TPM.

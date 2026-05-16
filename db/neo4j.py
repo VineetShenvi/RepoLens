@@ -14,6 +14,21 @@ neo4j_client=Neo4jGraph(
     password=os.getenv('NEO4J_PASSWORD')
 )
 
+def prefix_graph_docs(docs: list, repo_id: str) -> list:
+    """Prefix every node ID with repo_id so multiple repos coexist in Neo4j without collisions."""
+    prefix = repo_id + '::'
+    for doc in docs:
+        for node in doc.nodes:
+            if not node.id.startswith(prefix):
+                node.id = prefix + node.id
+        for rel in doc.relationships:
+            if not rel.source.id.startswith(prefix):
+                rel.source.id = prefix + rel.source.id
+            if not rel.target.id.startswith(prefix):
+                rel.target.id = prefix + rel.target.id
+    return docs
+
+
 def store_graph(documents):
     logger.info("store_graph — start; %s documents", len(documents))
     t0 = time.perf_counter()

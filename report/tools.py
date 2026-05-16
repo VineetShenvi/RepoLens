@@ -6,6 +6,7 @@ from utils.chunker import chunk_tree
 from agents import Agent, Runner, trace, OpenAIChatCompletionsModel, function_tool
 import os
 from db.qdrant import store_docs
+from db.context import current_docs_collection
 import logging
 import time
 import certifi
@@ -171,7 +172,7 @@ def create_chunks(content : str, language : str, filename:str):
     try:
         chunks = chunk_tree(content, language.lower(), file_name=filename)
         logger.info("create_chunks — AST produced %s chunks for %s", len(chunks), filename)
-        store_docs(chunks=chunks)
+        store_docs(chunks=chunks, collection_name=current_docs_collection.get())
         logger.info("create_chunks — stored %s chunks in %.2fs for %s", len(chunks), time.perf_counter() - t0, filename)
         return('Created a chunk')
 

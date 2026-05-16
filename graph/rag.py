@@ -48,8 +48,8 @@ def _extract_identifiers(query: str) -> list:
     return list(candidates)
 
 
-def Graph_Query_Qdrant(message: str):
-    logger.info("Graph_Query_Qdrant — query='%s...'", message[:80])
+def Graph_Query_Qdrant(message: str, collection_name: str = 'graph_documents'):
+    logger.info("Graph_Query_Qdrant — query='%s...' collection=%s", message[:80], collection_name)
     t0 = time.perf_counter()
     message_embedding = openai_client.embeddings.create(
         model="text-embedding-3-small",
@@ -58,7 +58,7 @@ def Graph_Query_Qdrant(message: str):
 
     t1 = time.perf_counter()
     results = qdrant_client.query_points(
-        collection_name="graph_documents",
+        collection_name=collection_name,
         query=message_embedding.data[0].embedding,
         limit=7,
     )
@@ -66,19 +66,19 @@ def Graph_Query_Qdrant(message: str):
     return results
 
 
-def keyword_search_documents(query: str, limit: int = 5) -> list:
+def keyword_search_documents(query: str, collection_name: str = 'documents', limit: int = 5) -> list:
     identifiers = _extract_identifiers(query)
     if not identifiers:
         return []
     try:
         from qdrant_client.models import PayloadSchemaType
         qdrant_client.create_payload_index(
-            collection_name="documents",
+            collection_name=collection_name,
             field_name="name",
             field_schema=PayloadSchemaType.KEYWORD,
         )
         results, _ = qdrant_client.scroll(
-            collection_name="documents",
+            collection_name=collection_name,
             scroll_filter=Filter(
                 must=[FieldCondition(key="name", match=MatchAny(any=identifiers))]
             ),
