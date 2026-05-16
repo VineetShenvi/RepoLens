@@ -41,7 +41,8 @@ User
        └── Chat loop
              └── Chat Agent (OpenAI Agents SDK)
                    └── Query_VectorDB()
-                         ├── Qdrant vector search (graph_documents_{repo_key})
+                         ├── Qdrant vector search → 15 candidates (graph_documents_{repo_key})
+                         ├── Cohere rerank-v3.5 → top 5
                          └── Neo4j traversal (1-hop relationships, filtered by prefix)
 ```
 
@@ -58,6 +59,7 @@ User
 | Graph extraction | LangChain `LLMGraphTransformer` |
 | Knowledge graph | Neo4j (Aura) |
 | Vector database | Qdrant Cloud |
+| Reranking | Cohere `rerank-v3.5` |
 | Embeddings | OpenAI `text-embedding-3-small` |
 | Code chunking | `tree-sitter` via `chunk_ast` |
 | PDF generation | `Playwright` + markdown rendering |
@@ -73,6 +75,7 @@ User
 - Qdrant Cloud account (free tier works)
 - OpenAI API key
 - GitHub Personal Access Token
+- Cohere API key (for reranking)
 
 ---
 
@@ -94,6 +97,9 @@ Create a `.env` file in the project root:
 
 ```env
 OPENAI_API_KEY=sk-...
+
+# Cohere
+COHERE_API_KEY=your-cohere-api-key
 
 # GitHub
 Github_access_token=Bearer ghp_...
@@ -176,12 +182,15 @@ RepoLens/
 The chat uses a three-source hybrid retrieval pipeline:
 
 **1. Vector search on graph documents (Qdrant)**
-Each code chunk is processed by `LLMGraphTransformer` which extracts entities and relationships. The resulting `GraphDocument` is stringified into a text description and embedded. At query time, the most semantically similar graph docs are retrieved.
+Each code chunk is processed by `LLMGraphTransformer` which extracts entities and relationships. The resulting `GraphDocument` is stringified into a text description and embedded. At query time, the 15 most semantically similar graph docs are retrieved as candidates.
 
-**2. Graph traversal (Neo4j)**
-From the matched graph doc nodes, a 1-hop Cypher traversal finds directly connected entities — revealing how functions call each other, what they initialize, what they return. `MENTIONS` relationships are filtered out to reduce noise.
+**2. Reranking (Cohere)**
+The 15 candidates are reranked by Cohere `rerank-v3.5` against the user's query, and only the top 5 are kept. This improves relevance over raw vector similarity — especially for technical queries with code identifiers — and keeps the downstream prompt within the model's context window.
 
-**3. Raw code chunks (Qdrant)**
+**3. Graph traversal (Neo4j)**
+From the top-5 reranked nodes, a 1-hop Cypher traversal finds directly connected entities — revealing how functions call each other, what they initialize, what they return.
+
+**4. Raw code chunks (Qdrant)**
 The original code text is available in the graph doc payload and included as ground truth context.
 
 All three sources are combined into a single prompt sent to the chat agent.

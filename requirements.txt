@@ -14,6 +14,7 @@ botocore
 brotli
 build
 certifi
+cohere
 cffi
 charset-normalizer
 chromadb

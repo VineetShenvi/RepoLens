@@ -1,5 +1,5 @@
 from agents import Agent, Runner, trace, function_tool
-from graph.rag import Graph_Query_Qdrant, traversal_query, keyword_search_documents
+from graph.rag import Graph_Query_Qdrant, rerank_results, traversal_query, keyword_search_documents
 from openai.types.responses import ResponseTextDeltaEvent
 
 from openai import OpenAI
@@ -34,6 +34,7 @@ def _make_chat_agent(graph_collection: str, docs_collection: str) -> Agent:
         logger.info("Query_VectorDB — message='%s...' graph=%s docs=%s", message[:80], graph_collection, docs_collection)
         t0 = time.perf_counter()
         results = Graph_Query_Qdrant(message, collection_name=graph_collection)
+        results = rerank_results(results, message)
         keyword_chunks = keyword_search_documents(message, collection_name=docs_collection)
         logger.info("Query_VectorDB — Qdrant returned %s graph points, %s keyword chunks in %.2fs",
                     len(results.points), len(keyword_chunks), time.perf_counter() - t0)

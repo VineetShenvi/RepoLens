@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from qdrant_client.models import Filter, FieldCondition, MatchValue, MatchAny
 from qdrant_client import QdrantClient
 from graph.create_prompt import build_prompt
+import cohere
 import re
 import os
 import logging
@@ -60,9 +61,21 @@ def Graph_Query_Qdrant(message: str, collection_name: str = 'graph_documents'):
     results = qdrant_client.query_points(
         collection_name=collection_name,
         query=message_embedding.data[0].embedding,
-        limit=7,
+        limit=15,
     )
     logger.info("Graph_Query_Qdrant — Qdrant search returned %s points in %.2fs", len(results.points), time.perf_counter() - t1)
+    return results
+
+
+def rerank_results(results, query: str, top_n: int = 5):
+    if not results.points:
+        return results
+    co = cohere.ClientV2(api_key=os.getenv('COHERE_API_KEY'))
+    documents = [p.payload.get('Code', '') for p in results.points]
+    t0 = time.perf_counter()
+    reranked = co.rerank(model='rerank-v3.5', query=query, documents=documents, top_n=top_n)
+    logger.info("rerank_results — top_%s selected from %s candidates in %.2fs", top_n, len(documents), time.perf_counter() - t0)
+    results.points = [results.points[r.index] for r in reranked.results]
     return results
 
 
@@ -117,7 +130,7 @@ def traversal_query(results, message: str, keyword_chunks: list = None):
             logger.debug("traversal_query — Neo4j traversal for node_id=%s", node_id)
             t_neo = time.perf_counter()
             result_query = neo4j_client.query("""
-            MATCH (n {id: $node_id})-[r*1..2]-(neighbor)
+            MATCH (n {id: $node_id})-[r*1..1]-(neighbor)
             RETURN n.id AS source,
                    type(r[-1]) AS relationship,
                    neighbor.id AS target,
