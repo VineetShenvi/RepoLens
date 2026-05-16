@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RepoLens — GitHub Repository Explainer</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #1a1a24;
+    --border: #2a2a3a;
+    --accent: #7c6af7;
+    --accent2: #f7a26a;
+    --text: #e8e8f0;
+    --text-muted: #6b6b80;
+    --text-dim: #3a3a50;
+    --green: #4ade80;
+    --red: #f87171;
+    --font-mono: 'DM Mono', monospace;
+    --font-display: 'Syne', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(124,106,247,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(124,106,247,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 60px 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .header {
+    text-align: center;
+    margin-bottom: 64px;
+    animation: fadeUp 0.6s ease both;
+  }
+
+  .header .tag {
+    display: inline-block;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    color: var(--accent);
+    border: 1px solid rgba(124,106,247,0.3);
+    padding: 4px 12px;
+    border-radius: 2px;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+  }
+
+  .header h1 {
+    font-family: var(--font-display);
+    font-size: clamp(36px, 6vw, 64px);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    background: linear-gradient(135deg, var(--text) 0%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 12px;
+  }
+
+  .header p { color: var(--text-muted); font-size: 14px; letter-spacing: 0.05em; }
+
+  /* Steps */
+  .steps {
+    display: flex;
+    align-items: center;
+    margin-bottom: 48px;
+    animation: fadeUp 0.6s 0.1s ease both;
+  }
+
+  .step { display: flex; align-items: center; gap: 8px; flex: 1; }
+
+  .step-num {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: var(--text-muted);
+    flex-shrink: 0; transition: all 0.3s ease;
+  }
+
+  .step.active .step-num { border-color: var(--accent); color: var(--accent); background: rgba(124,106,247,0.1); }
+  .step.done   .step-num { border-color: var(--green);  color: var(--green);  background: rgba(74,222,128,0.1); }
+
+  .step-label { font-size: 11px; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; transition: color 0.3s; }
+  .step.active .step-label { color: var(--accent); }
+  .step.done   .step-label { color: var(--text-muted); }
+
+  .step-line { flex: 1; height: 1px; background: var(--border); margin: 0 12px; transition: background 0.3s; }
+  .step-line.done { background: var(--green); }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 32px;
+    margin-bottom: 24px;
+    animation: fadeUp 0.5s ease both;
+    display: none;
+  }
+
+  .card.visible { display: block; }
+
+  .card-title {
+    font-family: var(--font-display);
+    font-size: 13px; font-weight: 600;
+    letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 24px;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .card-title::before {
+    content: '';
+    display: inline-block;
+    width: 3px; height: 14px;
+    background: var(--accent);
+    border-radius: 2px; flex-shrink: 0;
+  }
+
+  /* Form */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-group.full { grid-column: 1 / -1; }
+
+  label { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-muted); }
+
+  input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 12px 14px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+    width: 100%;
+  }
+
+  input:focus { border-color: var(--accent); }
+  input::placeholder { color: var(--text-dim); }
+
+  .btn-submit {
+    width: 100%; padding: 14px;
+    background: var(--accent); border: none;
+    color: white; font-family: var(--font-mono);
+    font-size: 12px; letter-spacing: 0.15em; text-transform: uppercase;
+    cursor: pointer; border-radius: 4px;
+    transition: all 0.2s;
+  }
+
+  .btn-submit:hover { background: #6a58e5; transform: translateY(-1px); }
+  .btn-submit:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* Output */
+  .output-area {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 28px;
+    min-height: 300px; max-height: 600px;
+    overflow-y: auto;
+    font-family: var(--font-mono); font-size: 13px; line-height: 1.8;
+    color: var(--text);
+  }
+
+  .output-area::-webkit-scrollbar { width: 4px; }
+  .output-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .output-area h1 { font-family: var(--font-display); color: var(--accent); font-size: 22px; margin: 1.5em 0 0.5em; }
+  .output-area h2 { font-family: var(--font-display); font-size: 18px; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin: 1.5em 0 0.5em; }
+  .output-area h3 { font-family: var(--font-display); font-size: 15px; color: var(--accent2); margin: 1.2em 0 0.4em; }
+  .output-area p { margin-bottom: 1em; }
+  .output-area code { background: rgba(124,106,247,0.1); border: 1px solid rgba(124,106,247,0.2); padding: 2px 6px; border-radius: 3px; font-size: 12px; color: var(--accent2); }
+  .output-area pre { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 16px; overflow-x: auto; margin: 1em 0; }
+  .output-area pre code { background: none; border: none; padding: 0; color: var(--text); font-size: 12px; }
+  .output-area ul, .output-area ol { padding-left: 20px; margin-bottom: 1em; }
+  .output-area li { margin-bottom: 4px; }
+  .output-area blockquote { border-left: 3px solid var(--accent); padding-left: 16px; color: var(--text-muted); margin: 1em 0; }
+
+  .cursor { display: inline-block; width: 8px; height: 14px; background: var(--accent); animation: blink 1s step-end infinite; vertical-align: middle; margin-left: 2px; }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+  .output-actions { display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+
+  .btn-action {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 20px;
+    background: transparent; border: 1px solid var(--border);
+    color: var(--text-muted); font-family: var(--font-mono);
+    font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+    cursor: pointer; border-radius: 4px; transition: all 0.2s;
+  }
+
+  .btn-action:hover { border-color: var(--accent2); color: var(--accent2); }
+  .btn-action.danger:hover { border-color: var(--red); color: var(--red); }
+  .btn-action:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  /* Loading */
+  .loading-bar-wrap {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 24px; margin-bottom: 16px;
+  }
+
+  .loading-label {
+    font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--text-muted); margin-bottom: 12px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  .loading-bar { height: 2px; background: var(--surface); border-radius: 1px; overflow: hidden; }
+  .loading-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); animation: loadingPulse 1.5s ease-in-out infinite; width: 40%; }
+  @keyframes loadingPulse { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
+
+  .log-output {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 4px; padding: 16px;
+    max-height: 200px; overflow-y: auto;
+    font-size: 11px; color: var(--text-muted); line-height: 1.8;
+    margin-bottom: 16px;
+  }
+
+  .log-output::-webkit-scrollbar { width: 3px; }
+  .log-output::-webkit-scrollbar-thumb { background: var(--border); }
+  .log-line { display: flex; gap: 8px; }
+  .log-line .ts { color: var(--text-dim); flex-shrink: 0; }
+  .log-line .msg { color: var(--text-muted); }
+  .log-line.info    .msg { color: var(--accent); }
+  .log-line.success .msg { color: var(--green); }
+  .log-line.error   .msg { color: var(--red); }
+
+  /* Chat */
+  .chat-messages {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 20px;
+    height: 420px; overflow-y: auto;
+    margin-bottom: 16px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+
+  .chat-messages::-webkit-scrollbar { width: 4px; }
+  .chat-messages::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .message { display: flex; gap: 12px; animation: fadeUp 0.3s ease both; }
+  .message.user { flex-direction: row-reverse; }
+
+  .msg-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; flex-shrink: 0;
+    font-family: var(--font-display); font-weight: 700;
+  }
+
+  .message.user      .msg-avatar { background: rgba(247,162,106,0.15); border: 1px solid rgba(247,162,106,0.3); color: var(--accent2); }
+  .message.assistant .msg-avatar { background: rgba(124,106,247,0.15); border: 1px solid rgba(124,106,247,0.3); color: var(--accent); }
+
+  .msg-bubble { max-width: 75%; padding: 12px 16px; border-radius: 4px; font-size: 13px; line-height: 1.7; }
+  .message.user      .msg-bubble { background: rgba(247,162,106,0.08); border: 1px solid rgba(247,162,106,0.15); text-align: right; }
+  .message.assistant .msg-bubble { background: rgba(124,106,247,0.08); border: 1px solid rgba(124,106,247,0.15); }
+  .msg-bubble code { background: rgba(0,0,0,0.3); padding: 1px 5px; border-radius: 3px; font-size: 12px; color: var(--accent2); }
+
+  .chat-input-wrap { display: flex; gap: 10px; }
+
+  .chat-input {
+    flex: 1; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 12px 16px;
+    color: var(--text); font-family: var(--font-mono); font-size: 13px;
+    outline: none; transition: border-color 0.2s; resize: none; height: 48px;
+  }
+
+  .chat-input:focus { border-color: var(--accent); }
+
+  .btn-send {
+    padding: 12px 20px; background: var(--accent);
+    border: none; color: white; font-size: 18px;
+    cursor: pointer; border-radius: 4px; transition: all 0.2s;
+  }
+
+  .btn-send:hover { background: #6a58e5; }
+  .btn-send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); display: inline-block; animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(74,222,128,0.4); } 50% { box-shadow: 0 0 0 4px rgba(74,222,128,0); } }
+
+  .divider { height: 1px; background: var(--border); margin: 24px 0; }
+
+  .chat-divider {
+    text-align: center; color: var(--text-dim); font-size: 10px;
+    letter-spacing: 0.1em; padding: 4px 0;
+    border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); margin: 4px 0;
+  }
+
+  .chat-error-msg {
+    background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.2);
+    border-radius: 4px; padding: 12px 16px; font-size: 12px; color: var(--red);
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+
+  .btn-restart-inline {
+    background: transparent; border: 1px solid rgba(248,113,113,0.4);
+    color: var(--red); padding: 4px 12px; border-radius: 3px;
+    cursor: pointer; font-family: var(--font-mono); font-size: 10px;
+    letter-spacing: 0.1em; white-space: nowrap; transition: all 0.2s;
+  }
+
+  .btn-restart-inline:hover { background: rgba(248,113,113,0.1); }
+
+  .typing { display: flex; gap: 4px; align-items: center; padding: 4px 0; }
+  .typing span { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: typing 1.4s ease-in-out infinite; }
+  .typing span:nth-child(2) { animation-delay: 0.2s; }
+  .typing span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes typing { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }
+
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+
+  @media (max-width: 600px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .steps { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="tag">// code intelligence</div>
+    <h1>RepoLens</h1>
+    <p>Understand any GitHub repository through AI-powered analysis</p>
+  </div>
+
+  <div class="steps">
+    <div class="step active" id="step1"><div class="step-num">01</div><div class="step-label">Input</div></div>
+    <div class="step-line" id="line1"></div>
+    <div class="step" id="step2"><div class="step-num">02</div><div class="step-label">Report</div></div>
+    <div class="step-line" id="line2"></div>
+    <div class="step" id="step3"><div class="step-num">03</div><div class="step-label">Index</div></div>
+    <div class="step-line" id="line3"></div>
+    <div class="step" id="step4"><div class="step-num">04</div><div class="step-label">Chat</div></div>
+  </div>
+
+  <!-- Step 1: Repo Input -->
+  <div class="card visible" id="card-repo">
+    <div class="card-title">Repository Details</div>
+    <div class="form-grid">
+      <div class="form-group full">
+        <label>Repository URL</label>
+        <input type="text" id="input-url" placeholder="https://github.com/owner/repo"
+          oninput="autoFill()" />
+      </div>
+      <div class="form-group">
+        <label>Owner</label>
+        <input type="text" id="input-owner" placeholder="octocat" />
+      </div>
+      <div class="form-group">
+        <label>Repository Name</label>
+        <input type="text" id="input-repo" placeholder="my-project" />
+      </div>
+      <div class="form-group">
+        <label>Branch</label>
+        <input type="text" id="input-branch" placeholder="main" value="main" />
+      </div>
+    </div>
+    <button class="btn-submit" id="btn-analyze" onclick="analyzeRepo()">
+      Analyze Repository →
+    </button>
+  </div>
+
+  <!-- Step 2: Output -->
+  <div class="card" id="card-output">
+    <div class="card-title" id="output-title">Analysis Report</div>
+    <div class="output-area" id="output-area"><span class="cursor"></span></div>
+    <div class="output-actions">
+      <button class="btn-action" id="btn-download" onclick="downloadPDF()" disabled>↓ Download PDF</button>
+      <button class="btn-action" id="btn-open-chat" onclick="startChat()" disabled>⬡ Open Chat</button>
+    </div>
+  </div>
+
+  <!-- Step 3: Chat Loading -->
+  <div class="card" id="card-loading">
+    <div class="card-title">Indexing Repository</div>
+    <div class="loading-bar-wrap">
+      <div class="loading-label">
+        <span id="loading-label-text">Connecting...</span>
+        <span id="loading-status">initializing</span>
+      </div>
+      <div class="loading-bar"><div class="loading-bar-fill"></div></div>
+    </div>
+    <div class="log-output" id="log-output"></div>
+  </div>
+
+  <!-- Step 4: Chat -->
+  <div class="card" id="card-chat">
+    <div class="card-title">
+      Repository Chat
+      <span style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:10px;color:var(--green);">
+        <span class="status-dot"></span> connected
+      </span>
+    </div>
+    <div class="chat-messages" id="chat-messages">
+      <div class="message assistant">
+        <div class="msg-avatar">RL</div>
+        <div class="msg-bubble">Repository indexed. Ask me anything about the codebase.</div>
+      </div>
+    </div>
+    <div class="chat-input-wrap">
+      <textarea class="chat-input" id="chat-input"
+        placeholder="Ask about the codebase..."
+        onkeydown="handleChatKey(event)"></textarea>
+      <button class="btn-send" id="btn-send" onclick="sendMessage()">↑</button>
+    </div>
+    <div class="divider"></div>
+    <div class="output-actions">
+      <button class="btn-action" onclick="restartChat()">↺ Restart Chat</button>
+      <button class="btn-action danger" onclick="resetAll()">✕ Start Over</button>
+    </div>
+  </div>
+
+</div>
+<script>
+  // generate a session id once per page load
+  const sessionId = crypto.randomUUID();
+  let ws = null;
+
+  // ─── Auto-fill owner + repo from URL ─────────────────────────────
+  function autoFill() {
+    const url = document.getElementById('input-url').value.trim();
+    try {
+      const u = new URL(url);
+      const parts = u.pathname.split('/').filter(Boolean);
+      if (parts[0]) document.getElementById('input-owner').value = parts[0];
+      if (parts[1]) document.getElementById('input-repo').value = parts[1];
+    } catch {}
+  }
+
+  // ─── Step 1 → 2: Analyze ─────────────────────────────────────────
+  async function analyzeRepo() {
+    const url    = document.getElementById('input-url').value.trim();
+    const owner  = document.getElementById('input-owner').value.trim();
+    const repo   = document.getElementById('input-repo').value.trim();
+    const branch = document.getElementById('input-branch').value.trim();
+
+    if (!url || !owner || !repo || !branch) {
+      alert('Please fill in all fields.');
+      return;
+    }
+
+    const btn = document.getElementById('btn-analyze');
+    btn.disabled = true;
+    btn.textContent = 'Analyzing...';
+
+    showCard('card-output');
+    setStep(2);
+
+    const outputArea = document.getElementById('output-area');
+    outputArea.innerHTML = '<span class="cursor"></span>';
+
+    document.getElementById('btn-download').disabled = true;
+    document.getElementById('btn-open-chat').disabled = true;
+
+    let rawMarkdown = '';
+
+    try {
+      const res = await fetch(`/analyze/${sessionId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, owner, repo_name: repo, branch })
+      });
+
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      outputArea.innerHTML = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        rawMarkdown += decoder.decode(value, { stream: true });
+        outputArea.innerHTML = marked.parse(rawMarkdown);
+        outputArea.scrollTop = outputArea.scrollHeight;
+      }
+
+      // enable actions once streaming is done
+      document.getElementById('btn-download').disabled = false;
+      document.getElementById('btn-open-chat').disabled = false;
+      btn.disabled = false;
+      btn.textContent = 'Re-analyze →';
+
+    } catch (e) {
+      outputArea.innerHTML = `<p style="color:var(--red)">Error: ${e.message}</p>`;
+      btn.disabled = false;
+      btn.textContent = 'Retry →';
+    }
+  }
+
+  // ─── Download PDF ─────────────────────────────────────────────────
+  function downloadPDF() {
+    window.location.href = `/download/${sessionId}`;
+  }
+
+  // ─── Step 2 → 3: Start chat ───────────────────────────────────────
+  function startChat() {
+    setStep(3);
+    showCard('card-loading');
+    document.getElementById('btn-open-chat').disabled = true;
+    document.getElementById('log-output').innerHTML = '';
+    connectWebSocket();
+  }
+
+  // ─── WebSocket ────────────────────────────────────────────────────
+  function connectWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${protocol}//${window.location.host}/chat/${sessionId}`);
+
+    ws.onopen = () => addLog('info', 'Connected. Starting indexing pipeline...');
+
+    ws.onmessage = (event) => {
+      const msg = event.data;
+
+      if (msg === '__LOADING__') {
+        addLog('info', 'Building knowledge graph...');
+
+      } else if (msg.startsWith('__LOG__:')) {
+        addLog('info', msg.replace('__LOG__:', ''));
+
+      } else if (msg === '__READY__') {
+        addLog('success', 'Indexing complete. Opening chat...');
+        setTimeout(() => {
+          document.getElementById('card-loading').style.display = 'none';
+          showCard('card-chat');
+          setStep(4);
+        }, 600);
+
+      } else if (msg === '__CHAT_RESTARTED__') {
+        const div = document.createElement('div');
+        div.className = 'chat-divider';
+        div.textContent = '── chat history cleared ──';
+        document.getElementById('chat-messages').appendChild(div);
+
+      } else if (msg.startsWith('__CHAT_ERROR__:')) {
+        const errText = msg.replace('__CHAT_ERROR__:', '');
+        const div = document.createElement('div');
+        div.className = 'chat-error-msg';
+        div.innerHTML = `<span>⚠ ${escapeHtml(errText)}</span>
+          <button class="btn-restart-inline" onclick="restartChat()">Restart Chat</button>`;
+        document.getElementById('chat-messages').appendChild(div);
+        document.getElementById('btn-send').disabled = false;
+
+      } else if (msg.startsWith('__ERROR__:')) {
+        addLog('error', msg.replace('__ERROR__:', ''));
+
+      } else {
+        appendAssistantChunk(msg);
+      }
+    };
+
+    ws.onclose = () => console.log('WebSocket closed');
+    ws.onerror = () => addLog('error', 'WebSocket connection error');
+  }
+
+  function addLog(type, message) {
+    const logEl    = document.getElementById('log-output');
+    const statusEl = document.getElementById('loading-status');
+    const now = new Date();
+    const ts  = `[${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}]`;
+    const line = document.createElement('div');
+    line.className = `log-line ${type}`;
+    line.innerHTML = `<span class="ts">${ts}</span><span class="msg">${escapeHtml(message)}</span>`;
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+    if (statusEl) statusEl.textContent = message.split(' ').slice(0, 2).join(' ').toLowerCase() + '...';
+  }
+
+  // ─── Chat ─────────────────────────────────────────────────────────
+  let currentAssistantBubble = null;
+  let assistantRaw = '';
+  let assistantTimer = null;
+
+  function appendAssistantChunk(chunk) {
+    const messages = document.getElementById('chat-messages');
+    const typingEl = document.getElementById('typing-indicator');
+    if (typingEl) typingEl.remove();
+
+    if (!currentAssistantBubble) {
+      assistantRaw = '';
+      const msg = document.createElement('div');
+      msg.className = 'message assistant';
+      msg.innerHTML = `<div class="msg-avatar">RL</div><div class="msg-bubble"></div>`;
+      messages.appendChild(msg);
+      currentAssistantBubble = msg.querySelector('.msg-bubble');
+    }
+
+    assistantRaw += chunk;
+    currentAssistantBubble.innerHTML = marked.parse(assistantRaw);
+    messages.scrollTop = messages.scrollHeight;
+
+    clearTimeout(assistantTimer);
+    assistantTimer = setTimeout(() => {
+      currentAssistantBubble = null;
+      assistantRaw = '';
+      document.getElementById('btn-send').disabled = false;
+    }, 1000);
+  }
+
+  function handleChatKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  }
+
+  function sendMessage() {
+    const input = document.getElementById('chat-input');
+    const msg   = input.value.trim();
+    if (!msg || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+    const messages = document.getElementById('chat-messages');
+
+    const userMsg = document.createElement('div');
+    userMsg.className = 'message user';
+    userMsg.innerHTML = `<div class="msg-avatar">you</div><div class="msg-bubble">${escapeHtml(msg)}</div>`;
+    messages.appendChild(userMsg);
+
+    const typing = document.createElement('div');
+    typing.className = 'message assistant';
+    typing.id = 'typing-indicator';
+    typing.innerHTML = `<div class="msg-avatar">RL</div><div class="msg-bubble"><div class="typing"><span></span><span></span><span></span></div></div>`;
+    messages.appendChild(typing);
+    messages.scrollTop = messages.scrollHeight;
+
+    document.getElementById('btn-send').disabled = true;
+    input.value = '';
+    ws.send(msg);
+  }
+
+  function restartChat() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send('__RESTART_CHAT__');
+  }
+
+  // ─── Reset everything ─────────────────────────────────────────────
+  function resetAll() {
+    if (ws) ws.close();
+    ws = null;
+
+    ['card-output', 'card-loading', 'card-chat'].forEach(id => {
+      const el = document.getElementById(id);
+      el.style.display = 'none';
+      el.classList.remove('visible');
+    });
+
+    document.getElementById('output-area').innerHTML = '<span class="cursor"></span>';
+    document.getElementById('chat-messages').innerHTML = `
+      <div class="message assistant">
+        <div class="msg-avatar">RL</div>
+        <div class="msg-bubble">Repository indexed. Ask me anything about the codebase.</div>
+      </div>`;
+    document.getElementById('btn-analyze').disabled = false;
+    document.getElementById('btn-analyze').textContent = 'Analyze Repository →';
+    document.getElementById('log-output').innerHTML = '';
+
+    setStep(1);
+    // card-repo stays visible
+  }
+
+  // ─── Helpers ──────────────────────────────────────────────────────
+  function showCard(id) {
+    const el = document.getElementById(id);
+    el.classList.add('visible');
+    el.style.display = 'block';
+  }
+
+  function setStep(num) {
+    for (let i = 1; i <= 4; i++) {
+      const s = document.getElementById(`step${i}`);
+      s.classList.remove('active', 'done');
+      if (i < num) s.classList.add('done');
+      else if (i === num) s.classList.add('active');
+      if (i < 4) document.getElementById(`line${i}`).classList.toggle('done', i < num);
+    }
+  }
+
+  function escapeHtml(text) {
+    const d = document.createElement('div');
+    d.appendChild(document.createTextNode(text));
+    return d.innerHTML;
+  }
+</script>
+</body>
+</html>
